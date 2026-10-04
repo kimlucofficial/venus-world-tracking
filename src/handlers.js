@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { dashboardPayload, taskControlPayload, createTaskModal, createBugModal, createVoteModal, progressModal, noteModal, editTaskModal, deleteTaskModal, statusMenu, assigneeMenu } from './lib/dashboard.js';
 import { db } from './db.js';
 import { config } from './config.js';
 import { requireTeamPermission } from './lib/auth.js';
@@ -155,10 +156,8 @@ export async function handleCommand(interaction, client) {
   }
 
   if (name === 'bangtheodoi') {
-    const [taskRows]=await db.query('SELECT status,COUNT(*) c FROM tasks GROUP BY status'); const [bugs]=await db.query("SELECT COUNT(*) c FROM bugs WHERE status<>'fixed'");
-    const map=Object.fromEntries(taskRows.map(r=>[r.status,Number(r.c)])); const total=Object.values(map).reduce((a,b)=>a+b,0), done=map.done||0, pct=total?Math.round(done/total*100):0;
-    const text=`📝 Chờ làm: **${map.pending||0}**\n🔵 Đang làm: **${map.doing||0}**\n🟣 Đang test: **${map.testing||0}**\n🟠 Cần chỉnh: **${map.revise||0}**\n🔴 Bị block: **${map.blocked||0}**\n✅ Hoàn thành: **${done}**\n🐞 Bug chưa đóng: **${bugs[0].c}**\n\n**Tổng tiến độ:** ${pct}%`;
-    return reply(interaction,{embeds:[new EmbedBuilder().setColor(0x9B59FF).setTitle('DEVELOPMENT TRACKER').setDescription(text)]},false);
+    const payload = await dashboardPayload();
+    return reply(interaction,payload,true);
   }
 
   if (name === 'deadline') {
@@ -183,7 +182,27 @@ export async function handleCommand(interaction, client) {
 
 export async function handleButton(interaction, client) {
   if (!await requireTeamPermission(interaction)) return;
+
+  if (interaction.customId === 'dash_create_task') return interaction.showModal(createTaskModal());
+  if (interaction.customId === 'dash_create_bug') return interaction.showModal(createBugModal());
+  if (interaction.customId === 'dash_create_vote') return interaction.showModal(createVoteModal());
+  if (interaction.customId === 'dash_refresh') return interaction.update(await dashboardPayload());
+
   const [action,idRaw,arg]=interaction.customId.split(':'); const id=Number(idRaw);
+
+  if (action === 'dash_assign') return interaction.reply({...assigneeMenu(id), ephemeral:true});
+  if (action === 'dash_progress') { const task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.'); return interaction.showModal(progressModal(id,task.progress)); }
+  if (action === 'dash_status') return interaction.reply({...statusMenu(id), ephemeral:true});
+  if (action === 'dash_note') return interaction.showModal(noteModal(id));
+  if (action === 'dash_edit') { const task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.'); return interaction.showModal(editTaskModal(task)); }
+  if (action === 'dash_delete') return interaction.showModal(deleteTaskModal(id));
+  if (action === 'dash_done') {
+    const task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
+    await db.query("UPDATE tasks SET status='done',progress=100 WHERE id=?",[id]);
+    await addTaskHistory(id,interaction.user.id,'Hoàn thành','100%');
+    await refreshTask(client,id);
+    return reply(interaction,`${config.emojis.complete} **${task.code}** đã hoàn thành.`);
+  }
   if(action.startsWith('task_')){
     const task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không còn tồn tại.');
     if(action==='task_take'){await db.query("UPDATE tasks SET assignee_id=?,status=IF(status='pending','doing',status) WHERE id=?",[interaction.user.id,id]); await addTaskHistory(id,interaction.user.id,'Nhận việc','');}
@@ -205,6 +224,130 @@ export async function handleButton(interaction, client) {
     const choice=action==='vote_yes'?'yes':'no';
     await db.query('INSERT INTO vote_choices(vote_id,user_id,choice) VALUES(?,?,?) ON DUPLICATE KEY UPDATE choice=VALUES(choice)',[id,interaction.user.id,choice]);
     await refreshVote(client,id); return reply(interaction,choice==='yes'?`${config.emojis.yes} Đã ghi nhận **Đồng ý**.`:`${config.emojis.no} Đã ghi nhận **Không đồng ý**.`);
+  }
+}
+
+
+export async function handleSelect(interaction, client) {
+  if (!await requireTeamPermission(interaction)) return;
+  const [action,idRaw] = interaction.customId.split(':');
+
+  if (interaction.customId === 'dash_select_task') {
+    const id = Number(interaction.values[0]);
+    const task = await getTask(id);
+    if (!task) return reply(interaction,'❌ Công việc không còn tồn tại.');
+    return interaction.reply({...taskControlPayload(task), ephemeral:true});
+  }
+
+  if (action === 'dash_status_select') {
+    const id = Number(idRaw), task = await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
+    const st = interaction.values[0];
+    const progress = st === 'done' ? 100 : task.progress;
+    await db.query('UPDATE tasks SET status=?,progress=? WHERE id=?',[st,progress,id]);
+    await addTaskHistory(id,interaction.user.id,'Đổi trạng thái',`${statusLabels[task.status]} → ${statusLabels[st]}`);
+    await refreshTask(client,id);
+    return reply(interaction,`✅ **${task.code}** → **${statusLabels[st]}**.`);
+  }
+
+  if (action === 'dash_assign_select') {
+    const id = Number(idRaw), task = await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
+    const userId = interaction.values[0];
+    await db.query("UPDATE tasks SET assignee_id=?,status=IF(status='pending','doing',status) WHERE id=?",[userId,id]);
+    await addTaskHistory(id,interaction.user.id,'Phân công',`Giao cho <@${userId}>`);
+    await refreshTask(client,id);
+    return reply(interaction,`✅ **${task.code}** đã giao cho <@${userId}>.`);
+  }
+}
+
+export async function handleModal(interaction, client) {
+  if (!await requireTeamPermission(interaction)) return;
+  const [action,idRaw] = interaction.customId.split(':');
+
+  if (action === 'modal_create_task') {
+    await interaction.deferReply({ephemeral:true});
+    const title = interaction.fields.getTextInputValue('task_title').trim();
+    const description = interaction.fields.getTextInputValue('task_desc').trim();
+    const deadlineRaw = interaction.fields.getTextInputValue('task_deadline').trim();
+    const priorityRaw = interaction.fields.getTextInputValue('task_priority').trim().toLowerCase();
+    const categoryRaw = interaction.fields.getTextInputValue('task_category').trim().toLowerCase();
+    const deadline = deadlineRaw ? parseDeadline(deadlineRaw) : null;
+    if (deadlineRaw && !deadline) return reply(interaction,'❌ Deadline không hợp lệ. Dùng `10/10/2026 23:59`.');
+    const priority = ['low','normal','high','urgent'].includes(priorityRaw) ? priorityRaw : 'normal';
+    const category = categoryRaw || 'source';
+    const [res] = await db.query('INSERT INTO tasks(title,description,category,priority,assignee_id,creator_id,deadline) VALUES(?,?,?,?,?,?,?)',[title,description,category,priority,null,interaction.user.id,deadline]);
+    const id = res.insertId, code=`VNS-${String(id).padStart(4,'0')}`;
+    await db.query('UPDATE tasks SET code=? WHERE id=?',[code,id]);
+    await addTaskHistory(id,interaction.user.id,'Tạo công việc','Chưa phân công');
+    const task=await getTask(id); const mid=await postTask(client,task); await db.query('UPDATE tasks SET tracker_message_id=? WHERE id=?',[mid,id]);
+    return reply(interaction,`✅ Đã tạo **${code}** và đăng lên tracker.`);
+  }
+
+  if (action === 'modal_create_bug') {
+    await interaction.deferReply({ephemeral:true});
+    const title=interaction.fields.getTextInputValue('bug_title').trim();
+    const description=interaction.fields.getTextInputValue('bug_desc').trim();
+    const severityRaw=interaction.fields.getTextInputValue('bug_severity').trim().toLowerCase();
+    const relatedRaw=interaction.fields.getTextInputValue('bug_task').trim();
+    const severity=['minor','normal','major','critical'].includes(severityRaw)?severityRaw:'normal';
+    const related=relatedRaw ? Number((relatedRaw.match(/(\d+)/)||[])[1]) : null;
+    if(related && !await getTask(related)) return reply(interaction,'❌ Task liên quan không tồn tại.');
+    const [res]=await db.query('INSERT INTO bugs(title,description,severity,reporter_id,related_task_id) VALUES(?,?,?,?,?)',[title,description,severity,interaction.user.id,related||null]);
+    const id=res.insertId, code=`BUG-${String(id).padStart(4,'0')}`; await db.query('UPDATE bugs SET code=? WHERE id=?',[code,id]);
+    await addBugHistory(id,interaction.user.id,'Báo lỗi',description); const bug=await getBug(id); const mid=await postBug(client,bug); await db.query('UPDATE bugs SET tracker_message_id=? WHERE id=?',[mid,id]);
+    return reply(interaction,`🐞 Đã tạo **${code}** trong tracker.`);
+  }
+
+  if (action === 'modal_create_vote') {
+    await interaction.deferReply({ephemeral:true});
+    const title=interaction.fields.getTextInputValue('vote_title').trim();
+    const description=interaction.fields.getTextInputValue('vote_desc').trim();
+    const hoursRaw=interaction.fields.getTextInputValue('vote_hours').trim();
+    let hours=Number(hoursRaw||24); if(!Number.isFinite(hours)||hours<1)hours=24; hours=Math.min(168,Math.round(hours));
+    const [res]=await db.query('INSERT INTO votes(title,description,creator_id,closes_at) VALUES(?,?,?,DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR))',[title,description,interaction.user.id,hours]);
+    const id=res.insertId, code=`VOTE-${String(id).padStart(4,'0')}`; await db.query('UPDATE votes SET code=? WHERE id=?',[code,id]);
+    const vote=await getVote(id); const mid=await postVote(client,vote); await db.query('UPDATE votes SET message_id=? WHERE id=?',[mid,id]);
+    return reply(interaction,`🗳️ Đã tạo **${code}** trong tracker.`);
+  }
+
+  if (action === 'modal_edit_task') {
+    const id=Number(idRaw), task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
+    const title=interaction.fields.getTextInputValue('edit_title').trim();
+    const description=interaction.fields.getTextInputValue('edit_desc').trim();
+    const deadlineRaw=interaction.fields.getTextInputValue('edit_deadline').trim();
+    const priorityRaw=interaction.fields.getTextInputValue('edit_priority').trim().toLowerCase();
+    let deadline=task.deadline;
+    if(deadlineRaw){ deadline=parseDeadline(deadlineRaw); if(!deadline)return reply(interaction,'❌ Deadline không hợp lệ.'); }
+    const priority=['low','normal','high','urgent'].includes(priorityRaw)?priorityRaw:task.priority;
+    await db.query('UPDATE tasks SET title=?,description=?,deadline=?,priority=? WHERE id=?',[title,description,deadline,priority,id]);
+    await addTaskHistory(id,interaction.user.id,'Sửa công việc','Cập nhật từ dashboard');
+    await refreshTask(client,id);
+    return reply(interaction,`✅ Đã cập nhật **${task.code}**.`);
+  }
+
+  if (action === 'modal_delete_task') {
+    const id=Number(idRaw), task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
+    const confirm=interaction.fields.getTextInputValue('delete_confirm').trim().toUpperCase();
+    if(confirm!=='XOA')return reply(interaction,'❌ Đã hủy xóa vì bạn không nhập đúng `XOA`.');
+    if(task.tracker_message_id){const ch=await client.channels.fetch(config.trackerChannelId).catch(()=>null); const msg=await ch?.messages.fetch(task.tracker_message_id).catch(()=>null); await msg?.delete().catch(()=>{});}
+    await db.query('DELETE FROM tasks WHERE id=?',[id]);
+    return reply(interaction,`🗑️ Đã xóa **${task.code}**.`);
+  }
+
+  if (action === 'modal_progress') {
+    const id=Number(idRaw), task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
+    const p=Number(interaction.fields.getTextInputValue('progress_value').trim());
+    if(!Number.isInteger(p)||p<0||p>100)return reply(interaction,'❌ Tiến độ phải là số nguyên từ 0 đến 100.');
+    const status=p===100?'done':(task.status==='pending'?'doing':task.status);
+    await db.query('UPDATE tasks SET progress=?,status=? WHERE id=?',[p,status,id]);
+    await addTaskHistory(id,interaction.user.id,'Cập nhật tiến độ',`${task.progress}% → ${p}%`); await refreshTask(client,id);
+    return reply(interaction,`📊 **${task.code}** hiện **${p}%**.`);
+  }
+
+  if (action === 'modal_note') {
+    const id=Number(idRaw), task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
+    const note=interaction.fields.getTextInputValue('note_value').trim();
+    await addTaskHistory(id,interaction.user.id,'Ghi chú cập nhật',note);
+    return reply(interaction,`📝 Đã thêm ghi chú cho **${task.code}**.`);
   }
 }
 

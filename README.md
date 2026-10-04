@@ -94,3 +94,15 @@ Nếu muốn bot xóa card khi `/xoaviec`, cấp thêm `Manage Messages`.
 Task card được đăng một lần vào tracker. Các lệnh tiến độ/phân công/trạng thái/hoàn thành chỉnh trực tiếp card cũ. Mọi thay đổi được lưu trong `task_history` và xem bằng `/lichsu`.
 
 Buttons vẫn hoạt động sau restart vì custom ID được xử lý động, không phụ thuộc collector trong RAM.
+
+## Dashboard UI (button + input)
+Dùng `/bangtheodoi` để mở dashboard riêng cho VTeam/Helper/Owner.
+
+Dashboard có nút:
+- Tạo việc → mở form nhập tên, mô tả, deadline, ưu tiên, loại.
+- Báo lỗi → mở form báo lỗi.
+- Tạo vote → mở form tạo bình chọn.
+- Làm mới → cập nhật thống kê.
+- Dropdown công việc gần đây → chọn task rồi dùng Phân công / Tiến độ / Trạng thái / Ghi chú / Hoàn thành / Sửa / Xóa.
+
+Phân công dùng Discord User Select nên không cần nhập User ID thủ công.

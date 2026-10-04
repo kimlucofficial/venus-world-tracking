@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { config } from './config.js';
 import { initDatabase } from './db.js';
 import { commands } from './commands.js';
-import { handleCommand, handleButton, closeExpiredVotes } from './handlers.js';
+import { handleCommand, handleButton, handleSelect, handleModal, closeExpiredVotes } from './handlers.js';
 
 const client = new Client({ intents:[GatewayIntentBits.Guilds] });
 
@@ -20,6 +20,8 @@ client.on('interactionCreate', async interaction=>{
   try{
     if(interaction.isChatInputCommand()) await handleCommand(interaction,client);
     else if(interaction.isButton()) await handleButton(interaction,client);
+    else if(interaction.isStringSelectMenu() || interaction.isUserSelectMenu()) await handleSelect(interaction,client);
+    else if(interaction.isModalSubmit()) await handleModal(interaction,client);
   }catch(err){
     console.error(err);
     const payload={content:'❌ Có lỗi xảy ra khi xử lý thao tác. Kiểm tra Railway logs.',ephemeral:true};
