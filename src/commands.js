@@ -29,9 +29,13 @@ export const commands = [
   new SlashCommandBuilder().setName('xoaviec').setDescription('Xóa công việc')
     .addIntegerOption(o=>o.setName('id').setDescription('ID công việc').setRequired(true)),
 
-  new SlashCommandBuilder().setName('phancong').setDescription('Phân công người thực hiện')
+  new SlashCommandBuilder().setName('phancong').setDescription('Phân công nhiều người thực hiện')
     .addIntegerOption(o=>o.setName('id').setDescription('ID công việc').setRequired(true))
-    .addUserOption(o=>o.setName('nguoi').setDescription('Người đảm nhận').setRequired(true)),
+    .addUserOption(o=>o.setName('nguoi').setDescription('Người đảm nhận 1').setRequired(true))
+    .addUserOption(o=>o.setName('nguoi2').setDescription('Người đảm nhận 2'))
+    .addUserOption(o=>o.setName('nguoi3').setDescription('Người đảm nhận 3'))
+    .addUserOption(o=>o.setName('nguoi4').setDescription('Người đảm nhận 4'))
+    .addUserOption(o=>o.setName('nguoi5').setDescription('Người đảm nhận 5')),
 
   new SlashCommandBuilder().setName('tiendo').setDescription('Cập nhật tiến độ công việc')
     .addIntegerOption(o=>o.setName('id').setDescription('ID công việc').setRequired(true))

@@ -21,6 +21,8 @@ export function progressBar(percent) {
 
 export function taskEmbed(task) {
   const [icon, status] = statusMap[task.status] || ['❔', task.status];
+  const ids = Array.isArray(task.assignee_ids) ? task.assignee_ids : (task.assignee_id ? [String(task.assignee_id)] : []);
+  const assignees = ids.length ? ids.map(id=>`<@${id}>`).join(', ') : '*Chưa phân công*';
   const embed = new EmbedBuilder()
     .setColor(task.status === 'done' ? 0xB56BFF : task.status === 'blocked' ? 0xED4245 : 0x9B59FF)
     .setTitle(`${task.code} • ${task.title}`)
@@ -29,7 +31,7 @@ export function taskEmbed(task) {
       { name: 'Trạng thái', value: `${icon} **${status}**`, inline: true },
       { name: 'Ưu tiên', value: priorityMap[task.priority] || task.priority, inline: true },
       { name: 'Loại', value: `\`${task.category || 'source'}\``, inline: true },
-      { name: 'Người đảm nhận', value: task.assignee_id ? `<@${task.assignee_id}>` : '*Chưa phân công*', inline: true },
+      { name: 'Người đảm nhận', value: assignees, inline: true },
       { name: 'Người tạo', value: `<@${task.creator_id}>`, inline: true },
       { name: 'Deadline', value: task.deadline ? discordTimestamp(task.deadline) : '*Không có*', inline: false },
       { name: 'Tiến độ', value: progressBar(task.progress), inline: false }

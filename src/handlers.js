@@ -4,7 +4,7 @@ import { db } from './db.js';
 import { config } from './config.js';
 import { requireTeamPermission } from './lib/auth.js';
 import { parseDeadline } from './lib/time.js';
-import { getTask, getBug, getVote, voteCounts, addTaskHistory, addBugHistory } from './lib/data.js';
+import { getTask, getBug, getVote, voteCounts, addTaskHistory, addBugHistory, setTaskAssignees, addTaskAssignee } from './lib/data.js';
 import { postTask, refreshTask, postBug, refreshBug, postVote, refreshVote, refreshPublicDashboard } from './lib/messages.js';
 import { taskEmbed, bugEmbed, voteEmbed } from './lib/render.js';
 
@@ -46,6 +46,7 @@ export async function handleCommand(interaction, client) {
     ]);
     const id = res.insertId, code = `VNS-${String(id).padStart(4,'0')}`;
     await db.query('UPDATE tasks SET code=? WHERE id=?',[code,id]);
+    if (assignee) await setTaskAssignees(id,[assignee.id]);
     await addTaskHistory(id,interaction.user.id,'Tạo công việc',assignee ? `Phân công cho ${assignee.tag}` : 'Chưa phân công');
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`✅ Đã tạo **${code}** và đăng lên tracker.`);
@@ -73,10 +74,15 @@ export async function handleCommand(interaction, client) {
   }
 
   if (name === 'phancong') {
-    const id=interaction.options.getInteger('id',true), user=interaction.options.getUser('nguoi',true); const task=await ensureTask(interaction,id); if(!task)return;
-    await db.query("UPDATE tasks SET assignee_id=?, status=IF(status='pending','doing',status) WHERE id=?",[user.id,id]);
-    await addTaskHistory(id,interaction.user.id,'Phân công',`Giao cho ${user.tag}`); await refreshTask(client,id);
-    return reply(interaction,`✅ **${task.code}** đã giao cho ${user}.`);
+    const id=interaction.options.getInteger('id',true); const task=await ensureTask(interaction,id); if(!task)return;
+    const users=['nguoi','nguoi2','nguoi3','nguoi4','nguoi5'].map(k=>interaction.options.getUser(k)).filter(Boolean);
+    const unique=[...new Map(users.map(u=>[u.id,u])).values()];
+    const ids=unique.map(u=>u.id);
+    await setTaskAssignees(id,ids);
+    await db.query("UPDATE tasks SET status=IF(status='pending','doing',status) WHERE id=?",[id]);
+    const mentions=ids.map(x=>`<@${x}>`).join(', ');
+    await addTaskHistory(id,interaction.user.id,'Phân công',`Giao cho ${mentions}`); await refreshTask(client,id);
+    return reply(interaction,`✅ **${task.code}** đã giao cho ${mentions}.`);
   }
 
   if (name === 'tiendo') {
@@ -109,8 +115,9 @@ export async function handleCommand(interaction, client) {
 
   if (name === 'danhsach') {
     const st=interaction.options.getString('trangthai');
-    const [rows]=st?await db.query('SELECT * FROM tasks WHERE status=? ORDER BY id DESC LIMIT 30',[st]):await db.query('SELECT * FROM tasks ORDER BY id DESC LIMIT 30');
-    const text=rows.length?rows.map(t=>`**${t.code}** • ${t.title} • ${statusLabels[t.status]} • ${t.progress}%${t.assignee_id?` • <@${t.assignee_id}>`:''}`).join('\n'):'Không có công việc.';
+    const base=`SELECT t.*, (SELECT GROUP_CONCAT(ta.user_id ORDER BY ta.assigned_at ASC SEPARATOR ',') FROM task_assignees ta WHERE ta.task_id=t.id) AS assignee_ids_csv FROM tasks t`;
+    const [rows]=st?await db.query(`${base} WHERE t.status=? ORDER BY t.id DESC LIMIT 30`,[st]):await db.query(`${base} ORDER BY t.id DESC LIMIT 30`);
+    const text=rows.length?rows.map(t=>{const ids=String(t.assignee_ids_csv||t.assignee_id||'').split(',').filter(Boolean); return `**${t.code}** • ${t.title} • ${statusLabels[t.status]} • ${t.progress}%${ids.length?` • ${ids.map(x=>`<@${x}>`).join(', ')}`:''}`}).join('\n'):'Không có công việc.';
     return reply(interaction,{embeds:[new EmbedBuilder().setColor(0x9B59FF).setTitle('Danh sách công việc').setDescription(text)]});
   }
 
@@ -161,13 +168,13 @@ export async function handleCommand(interaction, client) {
   }
 
   if (name === 'deadline') {
-    const [rows]=await db.query("SELECT * FROM tasks WHERE deadline IS NOT NULL AND status NOT IN ('done','cancelled') ORDER BY deadline ASC LIMIT 20");
-    const text=rows.length?rows.map(t=>`**${t.code}** • ${t.title} • <t:${Math.floor(new Date(t.deadline).getTime()/1000)}:R>${t.assignee_id?` • <@${t.assignee_id}>`:''}`).join('\n'):'Không có deadline đang mở.';
+    const [rows]=await db.query("SELECT t.*, (SELECT GROUP_CONCAT(ta.user_id ORDER BY ta.assigned_at ASC SEPARATOR ',') FROM task_assignees ta WHERE ta.task_id=t.id) AS assignee_ids_csv FROM tasks t WHERE deadline IS NOT NULL AND status NOT IN ('done','cancelled') ORDER BY deadline ASC LIMIT 20");
+    const text=rows.length?rows.map(t=>{const ids=String(t.assignee_ids_csv||t.assignee_id||'').split(',').filter(Boolean); return `**${t.code}** • ${t.title} • <t:${Math.floor(new Date(t.deadline).getTime()/1000)}:R>${ids.length?` • ${ids.map(x=>`<@${x}>`).join(', ')}`:''}`}).join('\n'):'Không có deadline đang mở.';
     return reply(interaction,{embeds:[new EmbedBuilder().setColor(0x9B59FF).setTitle('Deadline sắp tới').setDescription(text)]});
   }
 
   if (name === 'thanhvien') {
-    const user=interaction.options.getUser('nguoi',true); const [rows]=await db.query('SELECT status,COUNT(*) c FROM tasks WHERE assignee_id=? GROUP BY status',[user.id]); const m=Object.fromEntries(rows.map(r=>[r.status,Number(r.c)]));
+    const user=interaction.options.getUser('nguoi',true); const [rows]=await db.query('SELECT t.status,COUNT(DISTINCT t.id) c FROM tasks t JOIN task_assignees ta ON ta.task_id=t.id WHERE ta.user_id=? GROUP BY t.status',[user.id]); const m=Object.fromEntries(rows.map(r=>[r.status,Number(r.c)]));
     const [bugs]=await db.query("SELECT COUNT(*) c FROM bugs WHERE assignee_id=? AND status<>'fixed'",[user.id]);
     const desc=`🔵 Đang làm: **${m.doing||0}**\n🟣 Đang test: **${m.testing||0}**\n🔴 Bị block: **${m.blocked||0}**\n✅ Hoàn thành: **${m.done||0}**\n🐞 Bug đang xử lý: **${bugs[0].c}**`;
     return reply(interaction,{embeds:[new EmbedBuilder().setColor(0x9B59FF).setTitle(`Thống kê • ${user.username}`).setDescription(desc).setThumbnail(user.displayAvatarURL())]});
@@ -208,7 +215,7 @@ export async function handleButton(interaction, client) {
   }
   if(action.startsWith('task_')){
     const task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không còn tồn tại.');
-    if(action==='task_take'){await db.query("UPDATE tasks SET assignee_id=?,status=IF(status='pending','doing',status) WHERE id=?",[interaction.user.id,id]); await addTaskHistory(id,interaction.user.id,'Nhận việc','');}
+    if(action==='task_take'){await addTaskAssignee(id,interaction.user.id); await db.query("UPDATE tasks SET status=IF(status='pending','doing',status) WHERE id=?",[id]); await addTaskHistory(id,interaction.user.id,'Nhận việc',`Thêm <@${interaction.user.id}> vào người đảm nhận`);}
     if(action==='task_progress'){const p=Math.min(100,Number(task.progress)+Number(arg||25)); await db.query("UPDATE tasks SET progress=?,status=IF(?=100,'done',IF(status='pending','doing',status)) WHERE id=?",[p,p,id]); await addTaskHistory(id,interaction.user.id,'Cập nhật tiến độ',`${task.progress}% → ${p}%`);}
     if(action==='task_testing'){await db.query("UPDATE tasks SET status='testing' WHERE id=?",[id]); await addTaskHistory(id,interaction.user.id,'Đổi trạng thái','Đang test');}
     if(action==='task_done'){await db.query("UPDATE tasks SET status='done',progress=100 WHERE id=?",[id]); await addTaskHistory(id,interaction.user.id,'Hoàn thành','100%');}
@@ -254,11 +261,13 @@ export async function handleSelect(interaction, client) {
 
   if (action === 'dash_assign_select') {
     const id = Number(idRaw), task = await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
-    const userId = interaction.values[0];
-    await db.query("UPDATE tasks SET assignee_id=?,status=IF(status='pending','doing',status) WHERE id=?",[userId,id]);
-    await addTaskHistory(id,interaction.user.id,'Phân công',`Giao cho <@${userId}>`);
+    const userIds = [...new Set(interaction.values.map(String))].slice(0,10);
+    await setTaskAssignees(id,userIds);
+    await db.query("UPDATE tasks SET status=IF(status='pending','doing',status) WHERE id=?",[id]);
+    const mentions=userIds.map(userId=>`<@${userId}>`).join(', ');
+    await addTaskHistory(id,interaction.user.id,'Phân công',`Giao cho ${mentions}`);
     await refreshTask(client,id);
-    return reply(interaction,`✅ **${task.code}** đã giao cho <@${userId}>.`);
+    return reply(interaction,`✅ **${task.code}** đã giao cho ${mentions}.`);
   }
 }
 

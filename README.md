@@ -42,3 +42,10 @@ npm start
 ```
 
 Database MySQL Railway được tạo bảng tự động khi bot khởi động.
+
+## Multi-assignee update
+- Một task có thể phân công tối đa 10 thành viên từ nút `Phân công` trên dashboard.
+- Chọn nhiều người trong Discord User Select; danh sách mới sẽ thay thế danh sách phân công hiện tại.
+- Nút `Nhận việc` sẽ thêm người bấm vào task, không ghi đè người đã được phân công.
+- Lệnh `/phancong` hỗ trợ tối đa 5 người để tương thích với slash command cũ.
+- Database tự tạo bảng `task_assignees` và tự migrate `assignee_id` cũ khi bot khởi động.

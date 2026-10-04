@@ -18,7 +18,7 @@ export async function dashboardPayload() {
   const [taskRows] = await db.query('SELECT status,COUNT(*) c FROM tasks GROUP BY status');
   const [bugsCount] = await db.query("SELECT COUNT(*) c FROM bugs WHERE status<>'fixed'");
   const [votesCount] = await db.query("SELECT COUNT(*) c FROM votes WHERE status='open'");
-  const [tasks] = await db.query("SELECT * FROM tasks ORDER BY FIELD(status,'blocked','revise','testing','doing','pending','done','cancelled'), deadline IS NULL, deadline ASC, id DESC LIMIT 18");
+  const [tasks] = await db.query("SELECT t.*, (SELECT GROUP_CONCAT(ta.user_id ORDER BY ta.assigned_at ASC SEPARATOR ',') FROM task_assignees ta WHERE ta.task_id=t.id) AS assignee_ids_csv FROM tasks t ORDER BY FIELD(status,'blocked','revise','testing','doing','pending','done','cancelled'), deadline IS NULL, deadline ASC, id DESC LIMIT 18");
   const [openBugs] = await db.query("SELECT * FROM bugs WHERE status<>'fixed' ORDER BY FIELD(severity,'critical','major','normal','minor'), id DESC LIMIT 6");
   const [openVotes] = await db.query("SELECT * FROM votes WHERE status='open' ORDER BY id DESC LIMIT 5");
   const [[avgRow]] = await db.query("SELECT COALESCE(ROUND(AVG(progress)),0) avg_progress FROM tasks WHERE status<>'cancelled'");
@@ -84,10 +84,18 @@ export async function dashboardPayload() {
   return { embeds:[board], components:[row1,row2] };
 }
 
+function taskAssignees(t){
+  const ids=String(t.assignee_ids_csv||'').split(',').map(x=>x.trim()).filter(Boolean);
+  if(!ids.length && t.assignee_id) ids.push(String(t.assignee_id));
+  return [...new Set(ids)];
+}
 function taskLine(t){
-  const who=t.assignee_id?`<@${t.assignee_id}>`:'*Chưa phân công*';
+  const ids=taskAssignees(t);
+  const who=ids.length?ids.map(id=>`<@${id}>`).join(', '):'*Chưa phân công*';
   const deadline=t.deadline?discordTimestamp(t.deadline):'*Không deadline*';
-  const title=String(t.title||'').slice(0,90); return `**${t.code} • ${title}**\n${statusText(t.status)} • ${progressBar(t.progress)}\n${who} • ${deadline}`;
+  const title=String(t.title||'').slice(0,90); return `**${t.code} • ${title}**
+${statusText(t.status)} • ${progressBar(t.progress)}
+${who} • ${deadline}`;
 }
 function bugLine(b){
   const sev={minor:'Nhẹ',normal:'Bình thường',major:'Nghiêm trọng',critical:'Khẩn cấp'}[b.severity]||b.severity;
@@ -107,8 +115,11 @@ function statusText(status){
 }
 
 export function taskControlPayload(task) {
+  const ids=Array.isArray(task.assignee_ids)?task.assignee_ids:taskAssignees(task);
+  const who=ids.length?ids.map(id=>`<@${id}>`).join(', '):'Chưa phân công';
   const embed = new EmbedBuilder().setColor(0x9B59FF).setTitle(`${task.code} • ${task.title}`)
-    .setDescription(`Tiến độ **${task.progress}%** • ${statusText(task.status)}\n${task.assignee_id ? `Người làm: <@${task.assignee_id}>` : 'Chưa phân công'}`);
+    .setDescription(`Tiến độ **${task.progress}%** • ${statusText(task.status)}
+Người làm: ${who}`);
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`dash_assign:${task.id}`).setLabel('Phân công').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`dash_progress:${task.id}`).setLabel('Tiến độ').setStyle(ButtonStyle.Secondary),
@@ -156,6 +167,6 @@ export function noteModal(taskId){ const modal=new ModalBuilder().setCustomId(`m
 export function editTaskModal(task){ const modal=new ModalBuilder().setCustomId(`modal_edit_task:${task.id}`).setTitle('Sửa công việc'); const title=input('edit_title','Tên công việc',TextInputStyle.Short,true); title.setValue(String(task.title||'').slice(0,4000)); const desc=input('edit_desc','Mô tả',TextInputStyle.Paragraph,true); desc.setValue(String(task.description||'').slice(0,4000)); const deadline=input('edit_deadline','Deadline',TextInputStyle.Short,false,'10/10/2026 23:59'); const priority=input('edit_priority','Độ ưu tiên',TextInputStyle.Short,false,'low / normal / high / urgent'); priority.setValue(task.priority||'normal'); modal.addComponents(row(title),row(desc),row(deadline),row(priority)); return modal; }
 export function deleteTaskModal(taskId){ const modal=new ModalBuilder().setCustomId(`modal_delete_task:${taskId}`).setTitle('Xác nhận xóa công việc'); modal.addComponents(row(input('delete_confirm','Nhập XOA để xác nhận',TextInputStyle.Short,true,'XOA'))); return modal; }
 export function statusMenu(taskId){ const menu=new StringSelectMenuBuilder().setCustomId(`dash_status_select:${taskId}`).setPlaceholder('Chọn trạng thái...').addOptions([['pending','📝 Chờ làm'],['doing','🔵 Đang làm'],['testing','🟣 Đang test'],['revise','🟠 Cần chỉnh sửa'],['blocked','🔴 Bị block'],['done','✅ Hoàn thành'],['cancelled','⚫ Đã hủy']].map(([value,label])=>new StringSelectMenuOptionBuilder().setLabel(label).setValue(value))); return {content:'Chọn trạng thái mới:',components:[new ActionRowBuilder().addComponents(menu)]}; }
-export function assigneeMenu(taskId){ const menu=new UserSelectMenuBuilder().setCustomId(`dash_assign_select:${taskId}`).setPlaceholder('Chọn người đảm nhận').setMinValues(1).setMaxValues(1); return {content:'Chọn thành viên để phân công:',components:[new ActionRowBuilder().addComponents(menu)]}; }
+export function assigneeMenu(taskId){ const menu=new UserSelectMenuBuilder().setCustomId(`dash_assign_select:${taskId}`).setPlaceholder('Chọn 1 đến 10 người đảm nhận').setMinValues(1).setMaxValues(10); return {content:'Chọn từ 1 đến 10 thành viên. Danh sách này sẽ thay thế phân công hiện tại:',components:[new ActionRowBuilder().addComponents(menu)]}; }
 function row(component){ return new ActionRowBuilder().addComponents(component); }
 function input(id,label,style,required,placeholder){ const x=new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required); if(placeholder)x.setPlaceholder(placeholder); return x; }

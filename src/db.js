@@ -29,6 +29,25 @@ export async function initDatabase() {
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
 
+
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS task_assignees (
+      task_id INT NOT NULL,
+      user_id VARCHAR(32) NOT NULL,
+      assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(task_id, user_id),
+      INDEX(user_id),
+      CONSTRAINT fk_task_assignees_task FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+
+  // Tự migrate dữ liệu cũ: task nào trước đây chỉ có 1 assignee_id sẽ được đưa vào bảng nhiều người.
+  await db.query(`
+    INSERT IGNORE INTO task_assignees(task_id,user_id)
+    SELECT id, assignee_id FROM tasks WHERE assignee_id IS NOT NULL AND assignee_id <> ''
+  `);
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS task_history (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
