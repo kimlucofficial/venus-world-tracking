@@ -35,9 +35,15 @@ export async function dashboardPayload() {
 
   const sections = [
     `### <a:Manao23:1553624445418213447> TỔNG QUAN`,
-    `**Chờ làm:** ${map.pending||0}   **Đang làm:** ${map.doing||0}   **Đang test:** ${map.testing||0}`,
-    `**Cần chỉnh:** ${map.revise||0}   **Bị block:** ${map.blocked||0}   **Hoàn thành:** ${map.done||0}`,
-    `**Bug mở:** ${Number(bugsCount[0]?.c||0)}   **Vote mở:** ${Number(votesCount[0]?.c||0)}`,
+    `**Chờ làm:** ${map.pending||0}`,
+    `**Đang làm:** ${map.doing||0}`,
+    `**Đang test:** ${map.testing||0}`,
+    `**Cần chỉnh:** ${map.revise||0}`,
+    `**Bị block:** ${map.blocked||0}`,
+    `**Hoàn thành:** ${map.done||0}`,
+    `**Bug mở:** ${Number(bugsCount[0]?.c||0)}`,
+    `**Vote mở:** ${Number(votesCount[0]?.c||0)}`,
+    '',
     `**Tiến độ chung:** ${progressBar(overall)}`,
     '',
     `### <a:1357882491800911983:1553623193082794058> CÔNG VIỆC`,
@@ -60,9 +66,7 @@ export async function dashboardPayload() {
   const board = new EmbedBuilder()
     .setColor(0x9B59FF)
     .setTitle('BẢNG THEO DÕI TEAM')
-    .setDescription(description)
-    .setFooter({text:'Team Tracker • Tự động cập nhật'})
-    .setTimestamp();
+    .setDescription(description);
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dash_create_task').setLabel('Tạo việc').setStyle(ButtonStyle.Primary),
