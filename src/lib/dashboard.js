@@ -34,19 +34,19 @@ export async function dashboardPayload() {
   }
 
   const sections = [
-    `### 📊 TỔNG QUAN`,
-    `📝 **Chờ làm:** ${map.pending||0}   🔵 **Đang làm:** ${map.doing||0}   🟣 **Đang test:** ${map.testing||0}`,
-    `🟠 **Cần chỉnh:** ${map.revise||0}   🔴 **Bị block:** ${map.blocked||0}   ✅ **Hoàn thành:** ${map.done||0}`,
-    `🐞 **Bug mở:** ${Number(bugsCount[0]?.c||0)}   🗳️ **Vote mở:** ${Number(votesCount[0]?.c||0)}`,
+    `### <a:Manao23:1553624445418213447> TỔNG QUAN`,
+    `**Chờ làm:** ${map.pending||0}   **Đang làm:** ${map.doing||0}   **Đang test:** ${map.testing||0}`,
+    `**Cần chỉnh:** ${map.revise||0}   **Bị block:** ${map.blocked||0}   **Hoàn thành:** ${map.done||0}`,
+    `**Bug mở:** ${Number(bugsCount[0]?.c||0)}   **Vote mở:** ${Number(votesCount[0]?.c||0)}`,
     `**Tiến độ chung:** ${progressBar(overall)}`,
     '',
-    `### 📌 CÔNG VIỆC`,
+    `### <a:1357882491800911983:1553623193082794058> CÔNG VIỆC`,
     tasks.length ? tasks.map(taskLine).join('\n\n') : '*Chưa có công việc.*',
     '',
-    `### 🐞 BUG ĐANG MỞ`,
+    `### <a:gold:1555468545440358442> BUG ĐANG MỞ`,
     openBugs.length ? openBugs.map(bugLine).join('\n') : '*Không có bug đang mở.*',
     '',
-    `### 🗳️ TEAM VOTE`,
+    `### <a:18212kittypaw22:1553624799266472006> TEAM VOTE`,
     voteLines.length ? voteLines.join('\n\n') : '*Không có bình chọn đang mở.*'
   ];
 
@@ -59,22 +59,22 @@ export async function dashboardPayload() {
 
   const board = new EmbedBuilder()
     .setColor(0x9B59FF)
-    .setTitle('📋 BẢNG THEO DÕI TEAM')
+    .setTitle('BẢNG THEO DÕI TEAM')
     .setDescription(description)
     .setFooter({text:'Team Tracker • Tự động cập nhật'})
     .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('dash_create_task').setLabel('Tạo việc').setStyle(ButtonStyle.Primary).setEmoji('➕'),
-    new ButtonBuilder().setCustomId('dash_manage_task').setLabel('Quản lý việc').setStyle(ButtonStyle.Secondary).setEmoji('🛠️'),
-    new ButtonBuilder().setCustomId('dash_create_bug').setLabel('Báo lỗi').setStyle(ButtonStyle.Danger).setEmoji('🐞'),
-    new ButtonBuilder().setCustomId('dash_manage_bug').setLabel('Xử lý lỗi').setStyle(ButtonStyle.Secondary).setEmoji('🔧')
+    new ButtonBuilder().setCustomId('dash_create_task').setLabel('Tạo việc').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('dash_manage_task').setLabel('Quản lý việc').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('dash_create_bug').setLabel('Báo lỗi').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('dash_manage_bug').setLabel('Xử lý lỗi').setStyle(ButtonStyle.Secondary)
   );
 
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('dash_create_vote').setLabel('Tạo vote').setStyle(ButtonStyle.Secondary).setEmoji('🗳️'),
-    new ButtonBuilder().setCustomId('dash_vote').setLabel('Bình chọn').setStyle(ButtonStyle.Success).setEmoji('✅'),
-    new ButtonBuilder().setCustomId('dash_refresh').setLabel('Làm mới').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
+    new ButtonBuilder().setCustomId('dash_create_vote').setLabel('Tạo vote').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('dash_vote').setLabel('Bình chọn').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('dash_refresh').setLabel('Làm mới').setStyle(ButtonStyle.Secondary)
   );
 
   return { embeds:[board], components:[row1,row2] };
@@ -83,10 +83,10 @@ export async function dashboardPayload() {
 function taskLine(t){
   const who=t.assignee_id?`<@${t.assignee_id}>`:'*Chưa phân công*';
   const deadline=t.deadline?discordTimestamp(t.deadline):'*Không deadline*';
-  const title=String(t.title||'').slice(0,90); return `**${t.code} • ${title}**\n${statusEmoji(t.status)} ${statusText(t.status)} • ${progressBar(t.progress)}\n👤 ${who} • ⏰ ${deadline}`;
+  const title=String(t.title||'').slice(0,90); return `**${t.code} • ${title}**\n${statusText(t.status)} • ${progressBar(t.progress)}\n${who} • ${deadline}`;
 }
 function bugLine(b){
-  const sev={minor:'🟢',normal:'🟡',major:'🟠',critical:'🔴'}[b.severity]||'⚪';
+  const sev={minor:'Nhẹ',normal:'Bình thường',major:'Nghiêm trọng',critical:'Khẩn cấp'}[b.severity]||b.severity;
   const st={open:'Chưa xử lý',fixing:'Đang sửa',reopened:'Mở lại'}[b.status]||b.status;
   const title=String(b.title||'').slice(0,90); return `**${b.code} • ${title}** — ${sev} ${st}${b.assignee_id?` • <@${b.assignee_id}>`:''}`;
 }
