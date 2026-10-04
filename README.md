@@ -1,108 +1,44 @@
-# Venus World Development Tracker
+# Venus Tracker — Single Board
 
-Discord bot quản lý công việc/source/bug/vote cho VTeam + Helper. Node.js 20, discord.js v14, MySQL Railway.
+Bản này dùng **một message duy nhất** trong `TRACKER_CHANNEL_ID` cho toàn bộ tracker.
 
-## Quyền
-- Owner bypass
-- VTeam role
-- Helper role
-- Các role khác không dùng được command/button của bot.
+## Cách hoạt động
 
-## Kênh
-- `TRACKER_CHANNEL_ID`: tất cả task + bug + dashboard-related tracking.
-- Vote dùng chung `TRACKER_CHANNEL_ID`; không cần kênh vote riêng.
-- Không có announce channel, changelog channel hoặc bug channel riêng.
+- `/bangtheodoi` tạo/cập nhật bảng công khai.
+- Công việc, bug và vote **không tạo card/message riêng**.
+- Tạo mới hoặc cập nhật tiến độ/trạng thái/phân công sẽ edit lại đúng bảng chung.
+- Các nút thao tác nằm dưới cùng bảng:
+  - Tạo việc
+  - Quản lý việc
+  - Báo lỗi
+  - Xử lý lỗi
+  - Tạo vote
+  - Bình chọn
+  - Làm mới
+- `Quản lý việc`, `Xử lý lỗi`, `Bình chọn` mở input để nhập ID (`VNS-0001`, `BUG-0001`, `VOTE-0001`) rồi hiện bảng điều khiển riêng tư cho người thao tác.
+- Khi deploy bản này, bot tự xóa các card task/bug/vote cũ mà phiên bản trước đã tạo, giữ lại bảng tracker chung.
 
 ## Railway Variables
-Copy `.env.example` và tạo Variables tương ứng trong Railway.
 
-**Không commit bot token/database password lên GitHub.**
+```env
+DISCORD_BOT_TOKEN=
+DATABASE_URL=${{MySQL.MYSQL_URL}}
+CLIENT_ID=1556204770123849788
+GUILD_ID=1531743806070984815
+OWNER_ID=510847279490662400
+ROLE_VTEAM_ID=531744066218229830
+ROLE_HELPER_ID=1535493904000876614
+TRACKER_CHANNEL_ID=1556182195981385819
+TIMEZONE=Australia/Melbourne
+```
 
-Required:
-- DISCORD_BOT_TOKEN
-- DATABASE_URL
-- CLIENT_ID
-- GUILD_ID
-- OWNER_ID
-- ROLE_VTEAM_ID
-- ROLE_HELPER_ID
-- TRACKER_CHANNEL_ID
+> Reset token Discord cũ nếu token đã từng được chia sẻ công khai.
 
-Optional:
-- TIMEZONE (default Australia/Melbourne)
+## Run
 
-## Deploy Railway
-1. Reset Discord bot token nếu token cũ từng được chia sẻ ở nơi không an toàn.
-2. Push folder này lên GitHub.
-3. Railway → New Project → Deploy from GitHub.
-4. Add MySQL service.
-5. Trong bot service, add/reference `DATABASE_URL` của MySQL service.
-6. Add Discord variables từ `.env.example`.
-7. Start command: `npm start`.
-8. Bot tự tạo MySQL tables và tự đăng ký slash commands vào guild khi start.
+```bash
+npm install
+npm start
+```
 
-## Discord Bot permissions
-Invite bot với scopes:
-- `bot`
-- `applications.commands`
-
-Bot permissions tối thiểu:
-- View Channels
-- Send Messages
-- Embed Links
-- Read Message History
-- Use External Emojis
-
-Nếu muốn bot xóa card khi `/xoaviec`, cấp thêm `Manage Messages`.
-
-## Lệnh
-### Công việc
-- `/taoviec`
-- `/suaviec`
-- `/xoaviec`
-- `/phancong`
-- `/tiendo`
-- `/trangthai`
-- `/hoanthanh`
-- `/thongtin`
-- `/lichsu`
-- `/danhsach`
-- `/capnhat`
-
-### Bug
-- `/baoloi`
-- `/nhanloi`
-- `/dasualoi`
-- `/molailoi`
-
-### Vote
-- `/taobinhchon`
-- `/dongbinhchon`
-- `/danhsachbinhchon`
-
-### Tổng quan
-- `/bangtheodoi`
-- `/deadline`
-- `/thanhvien`
-
-## ID tự động
-- Task: `VNS-0001`, `VNS-0002`, ...
-- Bug: `BUG-0001`, ...
-- Vote: `VOTE-0001`, ...
-
-## Tracker behavior
-Task card được đăng một lần vào tracker. Các lệnh tiến độ/phân công/trạng thái/hoàn thành chỉnh trực tiếp card cũ. Mọi thay đổi được lưu trong `task_history` và xem bằng `/lichsu`.
-
-Buttons vẫn hoạt động sau restart vì custom ID được xử lý động, không phụ thuộc collector trong RAM.
-
-## Dashboard UI (button + input)
-Dùng `/bangtheodoi` để mở dashboard riêng cho VTeam/Helper/Owner.
-
-Dashboard có nút:
-- Tạo việc → mở form nhập tên, mô tả, deadline, ưu tiên, loại.
-- Báo lỗi → mở form báo lỗi.
-- Tạo vote → mở form tạo bình chọn.
-- Làm mới → cập nhật thống kê.
-- Dropdown công việc gần đây → chọn task rồi dùng Phân công / Tiến độ / Trạng thái / Ghi chú / Hoàn thành / Sửa / Xóa.
-
-Phân công dùng Discord User Select nên không cần nhập User ID thủ công.
+Database MySQL Railway được tạo bảng tự động khi bot khởi động.

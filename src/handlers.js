@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { dashboardPayload, taskControlPayload, createTaskModal, createBugModal, createVoteModal, progressModal, noteModal, editTaskModal, deleteTaskModal, statusMenu, assigneeMenu } from './lib/dashboard.js';
+import { dashboardPayload, taskControlPayload, bugControlPayload, voteControlPayload, createTaskModal, createBugModal, createVoteModal, manageTaskModal, manageBugModal, votePickModal, progressModal, noteModal, editTaskModal, deleteTaskModal, statusMenu, assigneeMenu } from './lib/dashboard.js';
 import { db } from './db.js';
 import { config } from './config.js';
 import { requireTeamPermission } from './lib/auth.js';
@@ -47,9 +47,6 @@ export async function handleCommand(interaction, client) {
     const id = res.insertId, code = `VNS-${String(id).padStart(4,'0')}`;
     await db.query('UPDATE tasks SET code=? WHERE id=?',[code,id]);
     await addTaskHistory(id,interaction.user.id,'Tạo công việc',assignee ? `Phân công cho ${assignee.tag}` : 'Chưa phân công');
-    const task = await getTask(id);
-    const messageId = await postTask(client,task);
-    await db.query('UPDATE tasks SET tracker_message_id=? WHERE id=?',[messageId,id]);
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`✅ Đã tạo **${code}** và đăng lên tracker.`);
   }
@@ -70,7 +67,6 @@ export async function handleCommand(interaction, client) {
 
   if (name === 'xoaviec') {
     const id=interaction.options.getInteger('id',true); const task=await ensureTask(interaction,id); if(!task)return;
-    if(task.tracker_message_id){const ch=await client.channels.fetch(config.trackerChannelId).catch(()=>null); const msg=await ch?.messages.fetch(task.tracker_message_id).catch(()=>null); await msg?.delete().catch(()=>{});}
     await db.query('DELETE FROM tasks WHERE id=?',[id]);
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`🗑️ Đã xóa **${task.code}**.`);
@@ -124,7 +120,7 @@ export async function handleCommand(interaction, client) {
     if(related && !await getTask(related)) return reply(interaction,'❌ Công việc liên quan không tồn tại.');
     const [res]=await db.query('INSERT INTO bugs(title,description,severity,reporter_id,related_task_id) VALUES(?,?,?,?,?)',[title,description,severity,interaction.user.id,related||null]);
     const id=res.insertId, code=`BUG-${String(id).padStart(4,'0')}`; await db.query('UPDATE bugs SET code=? WHERE id=?',[code,id]);
-    await addBugHistory(id,interaction.user.id,'Báo lỗi',description); const bug=await getBug(id); const mid=await postBug(client,bug); await db.query('UPDATE bugs SET tracker_message_id=? WHERE id=?',[mid,id]);
+    await addBugHistory(id,interaction.user.id,'Báo lỗi',description);
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`🐞 Đã tạo **${code}** trong tracker.`);
   }
@@ -142,7 +138,6 @@ export async function handleCommand(interaction, client) {
     const title=interaction.options.getString('tieude',true), description=interaction.options.getString('mota',true), hours=interaction.options.getInteger('sogio')||24;
     const [res]=await db.query('INSERT INTO votes(title,description,creator_id,closes_at) VALUES(?,?,?,DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR))',[title,description,interaction.user.id,hours]);
     const id=res.insertId, code=`VOTE-${String(id).padStart(4,'0')}`; await db.query('UPDATE votes SET code=? WHERE id=?',[code,id]);
-    const vote=await getVote(id); const mid=await postVote(client,vote); await db.query('UPDATE votes SET message_id=? WHERE id=?',[mid,id]);
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`🗳️ Đã tạo **${code}** trong kênh tracker.`);
   }
@@ -191,6 +186,9 @@ export async function handleButton(interaction, client) {
   if (interaction.customId === 'dash_create_task') return interaction.showModal(createTaskModal());
   if (interaction.customId === 'dash_create_bug') return interaction.showModal(createBugModal());
   if (interaction.customId === 'dash_create_vote') return interaction.showModal(createVoteModal());
+  if (interaction.customId === 'dash_manage_task') return interaction.showModal(manageTaskModal());
+  if (interaction.customId === 'dash_manage_bug') return interaction.showModal(manageBugModal());
+  if (interaction.customId === 'dash_vote') return interaction.showModal(votePickModal());
   if (interaction.customId === 'dash_refresh') return interaction.update(await dashboardPayload());
 
   const [action,idRaw,arg]=interaction.customId.split(':'); const id=Number(idRaw);
@@ -283,7 +281,6 @@ export async function handleModal(interaction, client) {
     const id = res.insertId, code=`VNS-${String(id).padStart(4,'0')}`;
     await db.query('UPDATE tasks SET code=? WHERE id=?',[code,id]);
     await addTaskHistory(id,interaction.user.id,'Tạo công việc','Chưa phân công');
-    const task=await getTask(id); const mid=await postTask(client,task); await db.query('UPDATE tasks SET tracker_message_id=? WHERE id=?',[mid,id]);
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`✅ Đã tạo **${code}** và đăng lên tracker.`);
   }
@@ -299,7 +296,7 @@ export async function handleModal(interaction, client) {
     if(related && !await getTask(related)) return reply(interaction,'❌ Task liên quan không tồn tại.');
     const [res]=await db.query('INSERT INTO bugs(title,description,severity,reporter_id,related_task_id) VALUES(?,?,?,?,?)',[title,description,severity,interaction.user.id,related||null]);
     const id=res.insertId, code=`BUG-${String(id).padStart(4,'0')}`; await db.query('UPDATE bugs SET code=? WHERE id=?',[code,id]);
-    await addBugHistory(id,interaction.user.id,'Báo lỗi',description); const bug=await getBug(id); const mid=await postBug(client,bug); await db.query('UPDATE bugs SET tracker_message_id=? WHERE id=?',[mid,id]);
+    await addBugHistory(id,interaction.user.id,'Báo lỗi',description);
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`🐞 Đã tạo **${code}** trong tracker.`);
   }
@@ -312,9 +309,34 @@ export async function handleModal(interaction, client) {
     let hours=Number(hoursRaw||24); if(!Number.isFinite(hours)||hours<1)hours=24; hours=Math.min(168,Math.round(hours));
     const [res]=await db.query('INSERT INTO votes(title,description,creator_id,closes_at) VALUES(?,?,?,DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR))',[title,description,interaction.user.id,hours]);
     const id=res.insertId, code=`VOTE-${String(id).padStart(4,'0')}`; await db.query('UPDATE votes SET code=? WHERE id=?',[code,id]);
-    const vote=await getVote(id); const mid=await postVote(client,vote); await db.query('UPDATE votes SET message_id=? WHERE id=?',[mid,id]);
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`🗳️ Đã tạo **${code}** trong tracker.`);
+  }
+
+  if (action === 'modal_manage_task') {
+    const raw=interaction.fields.getTextInputValue('manage_task_id').trim();
+    const id=Number((raw.match(/(\d+)/)||[])[1]);
+    const task=id?await getTask(id):null;
+    if(!task)return reply(interaction,'❌ Không tìm thấy công việc. Ví dụ ID hợp lệ: `VNS-0007`.');
+    return interaction.reply({...taskControlPayload(task),ephemeral:true});
+  }
+
+  if (action === 'modal_manage_bug') {
+    const raw=interaction.fields.getTextInputValue('manage_bug_id').trim();
+    const id=Number((raw.match(/(\d+)/)||[])[1]);
+    const bug=id?await getBug(id):null;
+    if(!bug)return reply(interaction,'❌ Không tìm thấy lỗi. Ví dụ ID hợp lệ: `BUG-0003`.');
+    return interaction.reply({...bugControlPayload(bug),ephemeral:true});
+  }
+
+  if (action === 'modal_pick_vote') {
+    const raw=interaction.fields.getTextInputValue('pick_vote_id').trim();
+    const id=Number((raw.match(/(\d+)/)||[])[1]);
+    const vote=id?await getVote(id):null;
+    if(!vote)return reply(interaction,'❌ Không tìm thấy vote. Ví dụ ID hợp lệ: `VOTE-0002`.');
+    if(vote.status!=='open')return reply(interaction,'🔒 Bình chọn này đã đóng.');
+    const c=await voteCounts(id);
+    return interaction.reply({...voteControlPayload(vote,c.yes,c.no),ephemeral:true});
   }
 
   if (action === 'modal_edit_task') {
@@ -336,7 +358,6 @@ export async function handleModal(interaction, client) {
     const id=Number(idRaw), task=await getTask(id); if(!task)return reply(interaction,'❌ Công việc không tồn tại.');
     const confirm=interaction.fields.getTextInputValue('delete_confirm').trim().toUpperCase();
     if(confirm!=='XOA')return reply(interaction,'❌ Đã hủy xóa vì bạn không nhập đúng `XOA`.');
-    if(task.tracker_message_id){const ch=await client.channels.fetch(config.trackerChannelId).catch(()=>null); const msg=await ch?.messages.fetch(task.tracker_message_id).catch(()=>null); await msg?.delete().catch(()=>{});}
     await db.query('DELETE FROM tasks WHERE id=?',[id]);
     await refreshPublicDashboard(client).catch(()=>{});
     return reply(interaction,`🗑️ Đã xóa **${task.code}**.`);
