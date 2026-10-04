@@ -26,40 +26,43 @@ export async function dashboardPayload() {
   const map = Object.fromEntries(taskRows.map(r => [r.status, Number(r.c)]));
   const overall = Number(avgRow?.avg_progress || 0);
 
-  const summary = new EmbedBuilder()
-    .setColor(0x9B59FF)
-    .setTitle('📊 BẢNG THEO DÕI TEAM')
-    .setDescription([
-      `📝 **Chờ làm:** ${map.pending||0}   🔵 **Đang làm:** ${map.doing||0}   🟣 **Đang test:** ${map.testing||0}`,
-      `🟠 **Cần chỉnh:** ${map.revise||0}   🔴 **Bị block:** ${map.blocked||0}   ✅ **Hoàn thành:** ${map.done||0}`,
-      `🐞 **Bug mở:** ${Number(bugsCount[0]?.c||0)}   🗳️ **Vote mở:** ${Number(votesCount[0]?.c||0)}`,
-      '',
-      `**Tiến độ chung:** ${progressBar(overall)}`
-    ].join('\n'))
-    .setFooter({text:'Team Tracker • Tự động cập nhật'})
-    .setTimestamp();
-
-  const taskEmbed = new EmbedBuilder()
-    .setColor(0x9B59FF)
-    .setTitle('📌 CÔNG VIỆC')
-    .setDescription(tasks.length ? tasks.map(taskLine).join('\n\n') : '*Chưa có công việc.*');
-
-  const bugEmbed = new EmbedBuilder()
-    .setColor(0xED4245)
-    .setTitle('🐞 BUG ĐANG MỞ')
-    .setDescription(openBugs.length ? openBugs.map(bugLine).join('\n') : '*Không có bug đang mở.*');
-
   const voteLines = [];
   for (const v of openVotes) {
     const [[yesRow]] = await db.query("SELECT COUNT(*) c FROM vote_choices WHERE vote_id=? AND choice='yes'",[v.id]);
     const [[noRow]] = await db.query("SELECT COUNT(*) c FROM vote_choices WHERE vote_id=? AND choice='no'",[v.id]);
-    voteLines.push(`**${v.code} • ${String(v.title||'').slice(0,90)}**\n${config.emojis.yes} ${Number(yesRow?.c||0)}  •  ${config.emojis.no} ${Number(noRow?.c||0)}${v.closes_at ? `  •  ⏰ ${discordTimestamp(v.closes_at)}` : ''}`);
+    voteLines.push(`**${v.code} • ${String(v.title||'').slice(0,70)}**\n${config.emojis.yes} ${Number(yesRow?.c||0)}  •  ${config.emojis.no} ${Number(noRow?.c||0)}${v.closes_at ? `  •  ⏰ ${discordTimestamp(v.closes_at)}` : ''}`);
   }
-  const voteEmbed = new EmbedBuilder()
-    .setColor(0xB56BFF)
-    .setTitle('🗳️ TEAM VOTE')
-    .setDescription(voteLines.length ? voteLines.join('\n\n') : '*Không có bình chọn đang mở.*')
-    .setFooter({text:'Team Vote'});
+
+  const sections = [
+    `### 📊 TỔNG QUAN`,
+    `📝 **Chờ làm:** ${map.pending||0}   🔵 **Đang làm:** ${map.doing||0}   🟣 **Đang test:** ${map.testing||0}`,
+    `🟠 **Cần chỉnh:** ${map.revise||0}   🔴 **Bị block:** ${map.blocked||0}   ✅ **Hoàn thành:** ${map.done||0}`,
+    `🐞 **Bug mở:** ${Number(bugsCount[0]?.c||0)}   🗳️ **Vote mở:** ${Number(votesCount[0]?.c||0)}`,
+    `**Tiến độ chung:** ${progressBar(overall)}`,
+    '',
+    `### 📌 CÔNG VIỆC`,
+    tasks.length ? tasks.map(taskLine).join('\n\n') : '*Chưa có công việc.*',
+    '',
+    `### 🐞 BUG ĐANG MỞ`,
+    openBugs.length ? openBugs.map(bugLine).join('\n') : '*Không có bug đang mở.*',
+    '',
+    `### 🗳️ TEAM VOTE`,
+    voteLines.length ? voteLines.join('\n\n') : '*Không có bình chọn đang mở.*'
+  ];
+
+  // Discord giới hạn description của 1 embed ở 4096 ký tự.
+  // Giữ toàn bộ dashboard trong MỘT embed và cắt phần cuối nếu dữ liệu quá dài.
+  let description = sections.join('\n');
+  if (description.length > 4050) {
+    description = `${description.slice(0, 3980)}\n\n*… Còn thêm dữ liệu. Dùng các nút bên dưới để quản lý.*`;
+  }
+
+  const board = new EmbedBuilder()
+    .setColor(0x9B59FF)
+    .setTitle('📋 BẢNG THEO DÕI TEAM')
+    .setDescription(description)
+    .setFooter({text:'Team Tracker • Tự động cập nhật'})
+    .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dash_create_task').setLabel('Tạo việc').setStyle(ButtonStyle.Primary).setEmoji('➕'),
@@ -74,7 +77,7 @@ export async function dashboardPayload() {
     new ButtonBuilder().setCustomId('dash_refresh').setLabel('Làm mới').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
   );
 
-  return { embeds:[summary, taskEmbed, bugEmbed, voteEmbed], components:[row1,row2] };
+  return { embeds:[board], components:[row1,row2] };
 }
 
 function taskLine(t){
