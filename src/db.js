@@ -88,6 +88,15 @@ export async function initDatabase() {
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
 
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS bot_settings (
+      setting_key VARCHAR(64) PRIMARY KEY,
+      setting_value TEXT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS vote_choices (
       vote_id INT NOT NULL,

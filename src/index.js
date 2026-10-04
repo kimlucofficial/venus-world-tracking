@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { initDatabase } from './db.js';
 import { commands } from './commands.js';
 import { handleCommand, handleButton, handleSelect, handleModal, closeExpiredVotes } from './handlers.js';
+import { refreshPublicDashboard } from './lib/messages.js';
 
 const client = new Client({ intents:[GatewayIntentBits.Guilds] });
 
@@ -13,6 +14,7 @@ client.once('ready', async ()=>{
   await rest.put(Routes.applicationGuildCommands(config.clientId,config.guildId),{body:commands});
   console.log(`[Venus Tracker] Registered ${commands.length} guild commands.`);
   await closeExpiredVotes(client).catch(console.error);
+  await refreshPublicDashboard(client).catch(console.error);
   setInterval(()=>closeExpiredVotes(client).catch(console.error),60_000);
 });
 

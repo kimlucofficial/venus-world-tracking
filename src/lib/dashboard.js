@@ -11,35 +11,57 @@ import {
   UserSelectMenuBuilder
 } from 'discord.js';
 import { db } from '../db.js';
+import { discordTimestamp } from './time.js';
 
 export async function dashboardPayload() {
   const [taskRows] = await db.query('SELECT status,COUNT(*) c FROM tasks GROUP BY status');
   const [bugs] = await db.query("SELECT COUNT(*) c FROM bugs WHERE status<>'fixed'");
   const [votes] = await db.query("SELECT COUNT(*) c FROM votes WHERE status='open'");
+  const [activeTasks] = await db.query("SELECT * FROM tasks WHERE status NOT IN ('done','cancelled') ORDER BY FIELD(status,'blocked','revise','testing','doing','pending'), deadline IS NULL, deadline ASC, id DESC LIMIT 15");
+  const [doneTasks] = await db.query("SELECT * FROM tasks WHERE status='done' ORDER BY updated_at DESC LIMIT 5");
   const [recentTasks] = await db.query("SELECT id,code,title,status,progress FROM tasks ORDER BY id DESC LIMIT 25");
+  const [activeCountRows] = await db.query("SELECT COUNT(*) c FROM tasks WHERE status NOT IN ('done','cancelled')");
 
   const map = Object.fromEntries(taskRows.map(r => [r.status, Number(r.c)]));
   const total = Object.values(map).reduce((a,b)=>a+b,0);
-  const done = map.done || 0;
-  const pct = total ? Math.round(done / total * 100) : 0;
+  const totalProgressRows = await db.query("SELECT COALESCE(ROUND(AVG(progress)),0) avg_progress FROM tasks WHERE status<>'cancelled'");
+  const overall = Number(totalProgressRows[0][0]?.avg_progress || 0);
 
-  const embed = new EmbedBuilder()
+  const summary = new EmbedBuilder()
     .setColor(0x9B59FF)
-    .setTitle('DEVELOPMENT TRACKER')
+    .setTitle('📊 BẢNG THEO DÕI TEAM')
     .setDescription([
-      `📝 Chờ làm: **${map.pending||0}**`,
-      `🔵 Đang làm: **${map.doing||0}**`,
-      `🟣 Đang test: **${map.testing||0}**`,
-      `🟠 Cần chỉnh: **${map.revise||0}**`,
-      `🔴 Bị block: **${map.blocked||0}**`,
-      `✅ Hoàn thành: **${done}**`,
-      `🐞 Bug chưa đóng: **${Number(bugs[0]?.c||0)}**`,
-      `🗳️ Vote đang mở: **${Number(votes[0]?.c||0)}**`,
+      `📝 Chờ làm: **${map.pending||0}**  •  🔵 Đang làm: **${map.doing||0}**  •  🟣 Đang test: **${map.testing||0}**`,
+      `🟠 Cần chỉnh: **${map.revise||0}**  •  🔴 Bị block: **${map.blocked||0}**  •  ✅ Hoàn thành: **${map.done||0}**`,
+      `🐞 Bug chưa đóng: **${Number(bugs[0]?.c||0)}**  •  🗳️ Vote đang mở: **${Number(votes[0]?.c||0)}**`,
       '',
-      `**Tổng tiến độ:** ${pct}%`,
+      `**Tiến độ trung bình toàn bộ công việc:** ${progressBar(overall)}`,
       '',
-      'Dùng các nút bên dưới để thao tác. Không cần nhớ ID để tạo mới.'
-    ].join('\n'));
+      'Bảng này tự cập nhật khi team thay đổi tiến độ, trạng thái, phân công, bug hoặc vote.'
+    ].join('\n'))
+    .setFooter({text:'Team Tracker • Tự động cập nhật'})
+    .setTimestamp();
+
+  const activeLines = activeTasks.map(t => {
+    const who = t.assignee_id ? `<@${t.assignee_id}>` : '*Chưa phân công*';
+    const deadline = t.deadline ? discordTimestamp(t.deadline) : '*Không deadline*';
+    return [
+      `**${t.code} • ${t.title}**`,
+      `${statusEmoji(t.status)} ${statusText(t.status)} • ${progressBar(t.progress)}`,
+      `👤 ${who} • ⏰ ${deadline}`
+    ].join('\n');
+  });
+  const activeTotal = Number(activeCountRows[0]?.c || 0);
+  const active = new EmbedBuilder()
+    .setColor(0x9B59FF)
+    .setTitle(`📌 Công việc đang mở • ${activeTotal}`)
+    .setDescription(activeLines.join('\n\n') || '*Hiện không có công việc đang mở.*');
+  if (activeTotal > activeTasks.length) active.setFooter({text:`Đang hiển thị ${activeTasks.length}/${activeTotal} công việc. Dùng menu bên dưới để chọn các task gần đây.`});
+
+  const done = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('✅ Hoàn thành gần đây')
+    .setDescription(doneTasks.length ? doneTasks.map(t => `**${t.code}** • ${t.title} • **100%**${t.assignee_id?` • <@${t.assignee_id}>`:''}`).join('\n') : '*Chưa có công việc hoàn thành.*');
 
   const quick = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dash_create_task').setLabel('Tạo việc').setStyle(ButtonStyle.Primary).setEmoji('➕'),
@@ -60,7 +82,16 @@ export async function dashboardPayload() {
     components.push(new ActionRowBuilder().addComponents(select));
   }
 
-  return { embeds:[embed], components };
+  return { embeds:[summary, active, done], components };
+}
+
+function progressBar(percent){
+  const p=Math.max(0,Math.min(100,Number(percent)||0));
+  const fill=Math.round(p/10);
+  return `${'█'.repeat(fill)}${'░'.repeat(10-fill)} **${p}%**`;
+}
+function statusEmoji(status){
+  return ({pending:'📝',doing:'🔵',testing:'🟣',revise:'🟠',blocked:'🔴',done:'✅',cancelled:'⚫'})[status] || '❔';
 }
 
 export function taskControlPayload(task) {
