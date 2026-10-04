@@ -34,7 +34,7 @@ export function taskEmbed(task) {
       { name: 'Deadline', value: task.deadline ? discordTimestamp(task.deadline) : '*Không có*', inline: false },
       { name: 'Tiến độ', value: progressBar(task.progress), inline: false }
     )
-    .setFooter({ text: 'Venus World • Development Tracker' })
+    .setFooter({ text: 'Development Tracker' })
     .setTimestamp(task.updated_at ? new Date(task.updated_at) : new Date());
   if (task.status === 'done') embed.setAuthor({ name: 'CÔNG VIỆC ĐÃ HOÀN THÀNH' });
   return embed;
@@ -63,7 +63,7 @@ export function bugEmbed(bug) {
       { name:'Người xử lý', value:bug.assignee_id ? `<@${bug.assignee_id}>` : '*Chưa có*', inline:true },
       { name:'Liên quan', value:bug.related_task_id ? `Task #${bug.related_task_id}` : '*Không liên kết*', inline:true }
     )
-    .setFooter({ text:'Venus World • Bug Tracker' })
+    .setFooter({ text:'Bug Tracker' })
     .setTimestamp(bug.updated_at ? new Date(bug.updated_at) : new Date());
 }
 
@@ -90,7 +90,7 @@ export function voteEmbed(vote, yesCount=0, noCount=0) {
       { name:'Đóng bình chọn', value: vote.closes_at ? discordTimestamp(vote.closes_at) : '*Đóng thủ công*', inline:false },
       { name:'Người tạo', value:`<@${vote.creator_id}>`, inline:true }
     )
-    .setFooter({ text:'Venus World • Team Vote' })
+    .setFooter({ text:'Team Vote' })
     .setTimestamp();
 }
 

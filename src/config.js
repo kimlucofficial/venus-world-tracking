@@ -14,7 +14,7 @@ export const config = {
   roleVteamId: process.env.ROLE_VTEAM_ID,
   roleHelperId: process.env.ROLE_HELPER_ID,
   trackerChannelId: process.env.TRACKER_CHANNEL_ID,
-  voteChannelId: process.env.VOTE_CHANNEL_ID || process.env.TRACKER_CHANNEL_ID,
+  voteChannelId: process.env.TRACKER_CHANNEL_ID,
   timezone: process.env.TIMEZONE || 'Australia/Melbourne',
   emojis: {
     complete: '<a:1357882491800911983:1553623193082794058>',

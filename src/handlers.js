@@ -139,7 +139,7 @@ export async function handleCommand(interaction, client) {
     const [res]=await db.query('INSERT INTO votes(title,description,creator_id,closes_at) VALUES(?,?,?,DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR))',[title,description,interaction.user.id,hours]);
     const id=res.insertId, code=`VOTE-${String(id).padStart(4,'0')}`; await db.query('UPDATE votes SET code=? WHERE id=?',[code,id]);
     const vote=await getVote(id); const mid=await postVote(client,vote); await db.query('UPDATE votes SET message_id=? WHERE id=?',[mid,id]);
-    return reply(interaction,`🗳️ Đã tạo **${code}** trong kênh vote.`);
+    return reply(interaction,`🗳️ Đã tạo **${code}** trong kênh tracker.`);
   }
 
   if (name === 'dongbinhchon') {
@@ -158,7 +158,7 @@ export async function handleCommand(interaction, client) {
     const [taskRows]=await db.query('SELECT status,COUNT(*) c FROM tasks GROUP BY status'); const [bugs]=await db.query("SELECT COUNT(*) c FROM bugs WHERE status<>'fixed'");
     const map=Object.fromEntries(taskRows.map(r=>[r.status,Number(r.c)])); const total=Object.values(map).reduce((a,b)=>a+b,0), done=map.done||0, pct=total?Math.round(done/total*100):0;
     const text=`📝 Chờ làm: **${map.pending||0}**\n🔵 Đang làm: **${map.doing||0}**\n🟣 Đang test: **${map.testing||0}**\n🟠 Cần chỉnh: **${map.revise||0}**\n🔴 Bị block: **${map.blocked||0}**\n✅ Hoàn thành: **${done}**\n🐞 Bug chưa đóng: **${bugs[0].c}**\n\n**Tổng tiến độ:** ${pct}%`;
-    return reply(interaction,{embeds:[new EmbedBuilder().setColor(0x9B59FF).setTitle('VENUS WORLD • DEVELOPMENT TRACKER').setDescription(text)]},false);
+    return reply(interaction,{embeds:[new EmbedBuilder().setColor(0x9B59FF).setTitle('DEVELOPMENT TRACKER').setDescription(text)]},false);
   }
 
   if (name === 'deadline') {

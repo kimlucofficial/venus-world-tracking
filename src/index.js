@@ -12,7 +12,6 @@ client.once('ready', async ()=>{
   const rest = new REST({version:'10'}).setToken(config.token);
   await rest.put(Routes.applicationGuildCommands(config.clientId,config.guildId),{body:commands});
   console.log(`[Venus Tracker] Registered ${commands.length} guild commands.`);
-  if(!process.env.VOTE_CHANNEL_ID) console.warn('[Venus Tracker] VOTE_CHANNEL_ID is empty; votes will temporarily use TRACKER_CHANNEL_ID.');
   await closeExpiredVotes(client).catch(console.error);
   setInterval(()=>closeExpiredVotes(client).catch(console.error),60_000);
 });

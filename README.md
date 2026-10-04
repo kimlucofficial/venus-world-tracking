@@ -10,7 +10,7 @@ Discord bot quản lý công việc/source/bug/vote cho VTeam + Helper. Node.js 
 
 ## Kênh
 - `TRACKER_CHANNEL_ID`: tất cả task + bug + dashboard-related tracking.
-- `VOTE_CHANNEL_ID`: kênh vote riêng. Nếu để trống, bot tạm đăng vote vào tracker để không crash.
+- Vote dùng chung `TRACKER_CHANNEL_ID`; không cần kênh vote riêng.
 - Không có announce channel, changelog channel hoặc bug channel riêng.
 
 ## Railway Variables
@@ -29,7 +29,6 @@ Required:
 - TRACKER_CHANNEL_ID
 
 Optional:
-- VOTE_CHANNEL_ID
 - TIMEZONE (default Australia/Melbourne)
 
 ## Deploy Railway
